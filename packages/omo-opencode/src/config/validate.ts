@@ -1,6 +1,7 @@
+import { statSync } from "node:fs"
 import { relative } from "node:path"
 
-import type { OmoConfigEnv } from "@oh-my-opencode/omo-config-core"
+import { DEFAULT_READ_FILE_SYSTEM, resolveOmoConfigPaths, type OmoConfigEnv } from "@oh-my-opencode/omo-config-core"
 
 import { applyDisabledProviders } from "../shared/disabled-providers"
 import { log } from "../shared/logger"
@@ -152,10 +153,7 @@ function migrateRalphLoopConfig(config: OhMyOpenCodeConfig): OhMyOpenCodeConfig 
   }
 }
 
-export function validatePluginConfig(
-  directory: string,
-  environment: OmoConfigEnv = process.env,
-): PluginConfigValidation {
+function computeValidation(directory: string, environment: OmoConfigEnv): PluginConfigValidation {
   const chain = loadOmoOpenCodeConfigChain(directory, environment)
   const views = chain.views.map((view) => parseConfigView(view.path, view.config))
   const chainMessages = chain.diagnostics.map((diagnostic) => `${shortPath(diagnostic.path)}: ${diagnostic.message}`)
@@ -173,4 +171,36 @@ export function validatePluginConfig(
     path: chainMessages.length > 0 ? chain.diagnostics[0]?.path ?? null : firstFailingView?.path ?? firstView?.path ?? null,
     config: migrateRalphLoopConfig(config),
   }
+}
+
+type ValidationCacheEntry = { readonly signature: string; readonly result: PluginConfigValidation }
+const validationCache = new Map<string, ValidationCacheEntry>()
+
+// stat-based signature of every candidate config path so the 1s poll cache reloads on a real
+// edit/add/remove (live-reload preserved) instead of re-parsing the whole chain each tick.
+function configSignature(directory: string, environment: OmoConfigEnv): string {
+  const candidates = resolveOmoConfigPaths({ cwd: directory, env: environment, fileSystem: DEFAULT_READ_FILE_SYSTEM })
+  const parts: string[] = []
+  for (const candidate of candidates) {
+    try {
+      const stat = statSync(candidate.path)
+      parts.push(`${candidate.path}:${stat.mtimeMs}:${stat.size}`)
+    } catch {
+      parts.push(`${candidate.path}:none`)
+    }
+  }
+  return parts.join("|")
+}
+
+export function validatePluginConfig(
+  directory: string,
+  environment: OmoConfigEnv = process.env,
+): PluginConfigValidation {
+  const signature = configSignature(directory, environment)
+  const cached = validationCache.get(directory)
+  if (cached !== undefined && cached.signature === signature) return cached.result
+
+  const result = computeValidation(directory, environment)
+  validationCache.set(directory, { signature, result })
+  return result
 }
