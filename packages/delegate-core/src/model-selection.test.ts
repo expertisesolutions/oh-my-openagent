@@ -28,6 +28,19 @@ const legacyGptEntry: DelegateFallbackEntry = {
 }
 const gpt56SolFallbackChain = [nativeSolEntry, copilotSolEntry, legacyGptEntry]
 
+// The Kimi rung intentionally omits `openrouter`; the next rung declares `anthropic`.
+const writingKimiEntry: DelegateFallbackEntry = {
+  providers: ["kimi-for-coding", "moonshotai", "opencode-go", "opencode", "vercel"],
+  model: "kimi-k3",
+  variant: "low",
+}
+const writingClaudeEntry: DelegateFallbackEntry = {
+  providers: ["anthropic", "anthropic-api", "github-copilot", "opencode", "vercel"],
+  model: "claude-opus-5",
+  variant: "low",
+}
+const writingFallbackChain = [writingKimiEntry, writingClaudeEntry]
+
 describe("resolveModelForDelegateTask", () => {
   test("#given no provider cache exists #when no user override is configured #then returns skipped sentinel", () => {
     const result = resolveModelForDelegateTask({
@@ -133,22 +146,17 @@ describe("resolveModelForDelegateTask", () => {
     })
   })
 
-  test("#given a fallback model exists through an unlisted provider #when fallback resolves #then cross-provider matching remains", () => {
+  test("#given a fallback model exists only through an undeclared provider #when fallback resolves #then the undeclared provider is not selected", () => {
     const fallbackEntry = { providers: ["openai"], model: "gpt-5.5", variant: "high" }
     const result = resolveModelForDelegateTask({
       availableModels: new Set(["custom-provider/gpt-5.5"]),
       fallbackChain: [fallbackEntry],
     }, noCacheDeps)
 
-    expect(result).toEqual({
-      model: "custom-provider/gpt-5.5",
-      variant: "high",
-      fallbackEntry,
-      matchedFallback: true,
-    })
+    expect(result).toBeUndefined()
   })
 
-  test("#given custom and later-rung providers expose the same model #when fallback resolves #then the custom provider keeps the earlier variant", () => {
+  test("#given a declared later rung and an undeclared provider expose the same model #when fallback resolves #then the declared rung wins and the undeclared provider is ignored", () => {
     const result = resolveModelForDelegateTask({
       availableModels: new Set([
         "long-custom-provider/gpt-5.6-sol",
@@ -158,10 +166,36 @@ describe("resolveModelForDelegateTask", () => {
     }, noCacheDeps)
 
     expect(result).toEqual({
-      model: "long-custom-provider/gpt-5.6-sol",
-      variant: "xhigh",
-      fallbackEntry: nativeSolEntry,
+      model: "github-copilot/gpt-5.6-sol",
+      variant: "high",
+      fallbackEntry: copilotSolEntry,
       matchedFallback: true,
     })
+  })
+
+  test("#given an available OpenRouter Kimi and a writing rung that omits OpenRouter #when fallback resolves #then the next declared provider wins and OpenRouter is never selected", () => {
+    const result = resolveModelForDelegateTask({
+      availableModels: new Set([
+        "openrouter/moonshotai/kimi-k3",
+        "anthropic/claude-opus-5",
+      ]),
+      fallbackChain: writingFallbackChain,
+    }, noCacheDeps)
+
+    expect(result).toEqual({
+      model: "anthropic/claude-opus-5",
+      variant: "low",
+      fallbackEntry: writingClaudeEntry,
+      matchedFallback: true,
+    })
+  })
+
+  test("#given only an OpenRouter Kimi is available for a writing rung that omits OpenRouter #when fallback resolves #then no undeclared provider is selected", () => {
+    const result = resolveModelForDelegateTask({
+      availableModels: new Set(["openrouter/moonshotai/kimi-k3"]),
+      fallbackChain: writingFallbackChain,
+    }, noCacheDeps)
+
+    expect(result).toBeUndefined()
   })
 })

@@ -232,7 +232,7 @@ export function resolveModelForDelegateTask(
         }
       }
     } else {
-      for (const [entryIndex, entry] of fallbackChain.entries()) {
+      for (const entry of fallbackChain) {
         for (const provider of entry.providers) {
           const transformedModelId = transformModelForProvider(provider, modelIDForProvider(provider, entry.model))
           const fullModel = `${provider}/${transformedModelId}`
@@ -244,27 +244,6 @@ export function resolveModelForDelegateTask(
 
             return { model: match, variant: entry.variant, fallbackEntry: entry, matchedFallback: true }
           }
-        }
-
-        const laterRungProviders = new Set(
-          fallbackChain
-            .slice(entryIndex + 1)
-            .filter((candidate) => candidate.model === entry.model)
-            .flatMap((candidate) => candidate.providers),
-        )
-        const crossProviderCandidates = new Set(
-          [...input.availableModels].filter((model) => {
-            const [provider] = model.split("/")
-            return provider !== undefined && !laterRungProviders.has(provider)
-          }),
-        )
-        const crossProviderMatch = fuzzyMatchModel(entry.model, crossProviderCandidates)
-        if (crossProviderMatch) {
-          if (explicitHighModel && entry.variant === "high" && crossProviderMatch === explicitHighBaseModel) {
-            return { model: explicitHighModel, fallbackEntry: entry, matchedFallback: true }
-          }
-
-          return { model: crossProviderMatch, variant: entry.variant, fallbackEntry: entry, matchedFallback: true }
         }
       }
     }

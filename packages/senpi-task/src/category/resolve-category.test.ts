@@ -311,6 +311,29 @@ describe("resolveCategory", () => {
     })
   })
 
+  test("#given an OpenRouter Kimi is available but writing's Kimi rung omits OpenRouter #when resolved #then the next declared provider wins and OpenRouter is never selected", () => {
+    // given
+    const models = registry([
+      model("openrouter", "kimi-k3"),
+      model("anthropic", "claude-opus-5"),
+    ])
+
+    // when
+    const result = resolveCategory("writing", {}, models)
+
+    // then
+    const resolved = expectResolved(result)
+    expect(resolved.spec.provider).not.toBe("openrouter")
+    expect(resolved.spec.provider).toBe("anthropic")
+    expect(resolved.spec.modelId).toBe("claude-opus-5")
+    expect(resolved.modelSelection.matchedFallback).toBe(true)
+    expect(resolved.modelSelection.fallbackEntry).toEqual({
+      providers: ["anthropic", "anthropic-api", "github-copilot", "opencode", "vercel"],
+      model: "claude-opus-5",
+      variant: "low",
+    })
+  })
+
   test("#given visual-engineering primary models are unavailable and Kimi K3 is available #when resolved #then delegate-core fallback chain preserves the max variant", () => {
     // given
     const models = registry([model("opencode-go", "kimi-k3")])
