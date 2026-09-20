@@ -86,6 +86,8 @@ const RETRYABLE_MESSAGE_PATTERNS = [
   "server_error",
   "an error occurred while processing",
   "upstream request failed",
+  "cannot connect",
+  "unable to connect",
 ]
 
 /**

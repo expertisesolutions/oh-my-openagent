@@ -473,6 +473,20 @@ describe("model-error-classifier", () => {
     //#then
     expect(result).toBe(true)
   })
+
+  test("treats connection-refused / host-unreachable message as retryable (model_fallback bug)", () => {
+    //#given: exact message produced by the SDK when the provider host is totally unreachable
+    const error = {
+      name: undefined,
+      message: "Cannot connect to API: Unable to connect. Is the computer able to access the url?",
+    }
+
+    //#when
+    const result = shouldRetryError(error)
+
+    //#then
+    expect(result).toBe(true)
+  })
 })
 
 export {}
