@@ -27,8 +27,9 @@ export function handleGoalMessage(args: {
 
   switch (parsed.kind) {
     case "setObjective":
-      hooks.goal.setGoal(input.sessionID, parsed.objective)
-      log("[chat-message] Goal set", { sessionID: input.sessionID, objective: parsed.objective })
+      if (isFirstMessage && pluginConfig.default_mode?.goal) {
+        trySetGoal(hooks, input.sessionID, parsed.objective)
+      }
       break
     case "setStatus":
       if (parsed.status === "paused") {
@@ -57,8 +58,23 @@ export function handleGoalMessage(args: {
   ) {
     const objective = promptText.trim()
     if (objective.length > 0) {
-      hooks.goal.setGoal(input.sessionID, objective)
-      log("[chat-message] Default goal auto-started", { sessionID: input.sessionID, objective })
+      trySetGoal(hooks, input.sessionID, objective)
     }
+  }
+}
+
+function trySetGoal(hooks: ChatMessageHooks, sessionID: string, objective: string): void {
+  if (!hooks.goal) {
+    return
+  }
+  try {
+    hooks.goal.setGoal(sessionID, objective)
+    log("[chat-message] Goal set", { sessionID, objective })
+  } catch (error) {
+    // Goal validation errors (e.g. objective > 2000 chars) must not abort chat.message: that surfaces as a native "Failed to send prompt" toast.
+    log("[chat-message] Goal set skipped", {
+      sessionID,
+      reason: error instanceof Error ? error.message : String(error),
+    })
   }
 }
