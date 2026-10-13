@@ -1,0 +1,4 @@
+WHAT WAS TESTED: GIT_MASTER=1 git diff --check; targeted Bun cleanup tests were attempted.
+WHAT WAS OBSERVED: diff check passed. Bun tests could not run because bun is not installed in this environment.
+WHY IT IS ENOUGH: This is a one-line constant change; the exact changed line was inspected and diff whitespace validation passed.
+WHAT WAS OMITTED: No runtime QA was possible because the required bun executable is unavailable.

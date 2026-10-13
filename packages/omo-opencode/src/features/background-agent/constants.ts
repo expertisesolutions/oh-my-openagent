@@ -13,7 +13,7 @@ export const MIN_RUNTIME_BEFORE_STALE_MS = 30_000
 export const DEFAULT_SESSION_GONE_TIMEOUT_MS = 60_000
 export const MIN_IDLE_TIME_MS = 5000
 export const POLLING_INTERVAL_MS = 3000
-export const TASK_CLEANUP_DELAY_MS = 10 * 60 * 1000
+export const TASK_CLEANUP_DELAY_MS = 24 * 60 * 60 * 1000
 export const TMUX_CALLBACK_DELAY_MS = 200
 
 
