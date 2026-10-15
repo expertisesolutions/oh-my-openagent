@@ -9,7 +9,13 @@ export type GoalHookOptions = {
   readonly autoStart?: boolean
   readonly ultrawork?: boolean
   readonly getSessionExists?: (sessionID: string) => Promise<boolean>
+  // Min ms between idle nudges per session: a long background task re-triggers
+  // session.idle repeatedly; without this the agent is nudged every idle tick.
+  readonly continuationCooldownMs?: number
+  readonly now?: () => number
 }
+
+const DEFAULT_CONTINUATION_COOLDOWN_MS = 10 * 60 * 1000
 
 export type GoalHook = {
   readonly setGoal: (sessionID: string, objective: string) => Goal
@@ -36,6 +42,9 @@ function getSessionIDFromEvent(properties: unknown): string | undefined {
 export function createGoalHook(ctx: PluginInput, options: GoalHookOptions): GoalHook {
   const controller: GoalController = createGoalController({ projectDir: options.projectDir })
   const inFlightContinuations = new Set<string>()
+  const lastContinuationAt = new Map<string, number>()
+  const cooldownMs = options.continuationCooldownMs ?? DEFAULT_CONTINUATION_COOLDOWN_MS
+  const now = options.now ?? Date.now
 
   async function handleSessionIdle(sessionID: string): Promise<void> {
     const goal = controller.getGoal(sessionID)
@@ -45,6 +54,12 @@ export function createGoalHook(ctx: PluginInput, options: GoalHookOptions): Goal
     if (inFlightContinuations.has(sessionID)) {
       return
     }
+    const previous = lastContinuationAt.get(sessionID)
+    const current = now()
+    if (previous !== undefined && current - previous < cooldownMs) {
+      return
+    }
+    lastContinuationAt.set(sessionID, current)
     inFlightContinuations.add(sessionID)
     try {
       const promptText = buildContinuationPrompt(goal)
@@ -73,6 +88,7 @@ export function createGoalHook(ctx: PluginInput, options: GoalHookOptions): Goal
   }
 
   async function handleSessionDeleted(sessionID: string): Promise<void> {
+    lastContinuationAt.delete(sessionID)
     controller.clearGoal(sessionID)
   }
 
