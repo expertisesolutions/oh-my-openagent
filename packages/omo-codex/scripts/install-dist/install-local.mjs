@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// omo-codex-install:6df5dbbbb7ca9b9dce86fae98a525a9caa7de96caed85a4b77d4e8b4ab4d1501:22d5be94e5d18d210fd29271002ead106586ea0f47260699758540fc8993779b
+// omo-codex-install:6df5dbbbb7ca9b9dce86fae98a525a9caa7de96caed85a4b77d4e8b4ab4d1501:e74199a5638f8e39759b02aeeaddfba654bd4fa2265aa9dc8dbe866b56dbb1ba
 var __esm = (fn, res, err) => () => {
   if (fn)
     try {
@@ -316,7 +316,7 @@ function shouldRetainLine(line, cutoffMs) {
 function parseDiagnosticLine(line) {
   try {
     const parsed = JSON.parse(line);
-    if (!isRecord8(parsed)) {
+    if (!isRecord9(parsed)) {
       return null;
     }
     return parsed;
@@ -327,7 +327,7 @@ function parseDiagnosticLine(line) {
     throw error;
   }
 }
-function isRecord8(value) {
+function isRecord9(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function trimToMaxBytes(lines) {
@@ -5701,7 +5701,7 @@ function coerceBool(value) {
 function coerceString(value) {
   return typeof value == "string" ? value : undefined;
 }
-function isRecord9(value) {
+function isRecord10(value) {
   return typeof value == "object" && value !== null && !Array.isArray(value);
 }
 function toRfc3339(timestamp) {
@@ -5723,7 +5723,7 @@ function relocateInto(properties, key, value) {
     properties[key] = value;
 }
 function buildV1Event(message) {
-  const sourceProperties = isRecord9(message.properties) ? message.properties : {};
+  const sourceProperties = isRecord10(message.properties) ? message.properties : {};
   const properties = {
     ...sourceProperties
   };
@@ -7753,7 +7753,7 @@ var package_default;
 var init_package = __esm(() => {
   package_default = {
     name: "@oh-my-opencode/omo-codex",
-    version: "5.0.0-beta.79",
+    version: "5.0.0-beta.80",
     type: "module",
     private: true,
     description: "Codex harness adapter for oh-my-openagent. Vendored Codex plugin namespace (omo) + TypeScript installer + telemetry.",
@@ -13536,6 +13536,62 @@ var OmoConfigLayerSchema = object({
   legacy_migrations: record(string2(), unknown()).optional()
 }).strict();
 
+// packages/omo-config-core/src/schema/legacy-category-names.ts
+var LEGACY_CATEGORY_NAME_ALIASES = { deep: "deep-low" };
+function canonicalCategoryName(name) {
+  return Object.hasOwn(LEGACY_CATEGORY_NAME_ALIASES, name) ? LEGACY_CATEGORY_NAME_ALIASES[name] : name;
+}
+function isRecord6(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function joinPath(path, segment) {
+  return [...path, segment].join(".");
+}
+function canonicalizeCategoriesRecord(categories, path, renames) {
+  const result = {};
+  for (const [name, definition] of Object.entries(categories)) {
+    const canonical = canonicalCategoryName(name);
+    if (canonical === name) {
+      result[name] = definition;
+      continue;
+    }
+    const dropped = Object.hasOwn(categories, canonical);
+    renames.push({ canonical, dropped, legacy: name, path: joinPath(path, name) });
+    if (!dropped)
+      result[canonical] = definition;
+  }
+  return result;
+}
+function canonicalizeValue(value, path, renames) {
+  if (Array.isArray(value)) {
+    return value.map((entry, index) => canonicalizeValue(entry, [...path, String(index)], renames));
+  }
+  if (!isRecord6(value))
+    return value;
+  const result = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === "categories" && isRecord6(entry)) {
+      result[key] = canonicalizeCategoriesRecord(entry, [...path, key], renames);
+      continue;
+    }
+    if (key === "category" && typeof entry === "string") {
+      const canonical = canonicalCategoryName(entry);
+      if (canonical !== entry) {
+        renames.push({ canonical, dropped: false, legacy: entry, path: joinPath(path, key) });
+      }
+      result[key] = canonical;
+      continue;
+    }
+    result[key] = canonicalizeValue(entry, [...path, key], renames);
+  }
+  return result;
+}
+function canonicalizeLegacyCategoryNames(document) {
+  const renames = [];
+  const canonicalized = isRecord6(document) ? canonicalizeValue(document, [], renames) : {};
+  return { document: canonicalized, renames };
+}
+
 // node_modules/.bun/jsonc-parser@3.3.1/node_modules/jsonc-parser/lib/esm/impl/scanner.js
 function createScanner(text, ignoreTrivia = false) {
   const len = text.length;
@@ -14616,21 +14672,21 @@ function hasUnsafeUnrecognizedKey(issues) {
 function hasTamperedPrototype(value) {
   if (Array.isArray(value))
     return value.some((entry) => hasTamperedPrototype(entry));
-  if (!isRecord6(value))
+  if (!isRecord7(value))
     return false;
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null)
     return true;
   return Object.values(value).some((entry) => hasTamperedPrototype(entry));
 }
-function isRecord6(value) {
+function isRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function containerAt(record, path) {
   let container = record;
   for (const segment of path) {
     const next = container[segment];
-    if (!isRecord6(next))
+    if (!isRecord7(next))
       return null;
     container = next;
   }
@@ -14732,6 +14788,15 @@ function readConfigSource(path, scope, fileSystem) {
     value: parsedRecord
   };
 }
+function legacyCategoryDiagnostic(path, renames) {
+  const detail = renames.map((rename) => rename.dropped ? `${rename.path} ignored because ${rename.canonical} is also configured` : `${rename.path} renamed to ${rename.canonical}`).join(", ");
+  return {
+    kind: "deprecated-keys",
+    message: `Deprecated category name in ${path}: ${detail}. Rename it; the alias is removed in a future release.`,
+    path,
+    issuePaths: renames.map((rename) => rename.path)
+  };
+}
 function loadOmoConfig(options = {}) {
   const fileSystem = options.fileSystem ?? DEFAULT_READ_FILE_SYSTEM;
   const cwd = options.cwd ?? process.cwd();
@@ -14750,8 +14815,12 @@ function loadOmoConfig(options = {}) {
     if (loaded.diagnostic !== undefined)
       diagnostics.push(loaded.diagnostic);
     if (loaded.value !== undefined) {
-      layers.push({ config: loaded.value, source: loaded.source });
-      merged = mergeOmoConfigRecords(merged, loaded.value);
+      const canonicalized = canonicalizeLegacyCategoryNames(loaded.value);
+      if (canonicalized.renames.length > 0) {
+        diagnostics.push(legacyCategoryDiagnostic(candidate.path, canonicalized.renames));
+      }
+      layers.push({ config: canonicalized.document, source: loaded.source });
+      merged = mergeOmoConfigRecords(merged, canonicalized.document);
     }
   }
   const requestedProfile = resolveOmoProfileName({
@@ -17351,10 +17420,10 @@ function readCatalogMultiAgentVersion(model, cachePath) {
   } catch {
     return null;
   }
-  if (!isRecord7(cache) || !Array.isArray(cache.models))
+  if (!isRecord8(cache) || !Array.isArray(cache.models))
     return null;
   for (const entry of cache.models) {
-    if (!isRecord7(entry))
+    if (!isRecord8(entry))
       continue;
     if (entry.slug !== model && entry.id !== model)
       continue;
@@ -17379,7 +17448,7 @@ function readRootModelCatalogPath(config) {
   const single = config.match(/^\s*model_catalog_json\s*=\s*'([^']+)'/m);
   return single?.[1] ?? null;
 }
-function isRecord7(value) {
+function isRecord8(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function removeFeatureFlagSetting(config, featureName) {
