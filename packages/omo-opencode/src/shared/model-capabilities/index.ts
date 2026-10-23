@@ -6,8 +6,10 @@ import type { GetModelCapabilitiesInput, ModelCapabilities } from "@oh-my-openco
 import * as connectedProvidersCache from "../connected-providers-cache"
 import bundledModelCapabilitiesSnapshotJson from "../../generated/model-capabilities.generated.json"
 
+let cachedRuntimeSnapshot: ReturnType<typeof getBundledModelCapabilitiesSnapshot> | undefined
 export function getBundledModelCapabilitiesSnapshotForRuntime() {
-	return getBundledModelCapabilitiesSnapshot(bundledModelCapabilitiesSnapshotJson)
+	cachedRuntimeSnapshot ??= getBundledModelCapabilitiesSnapshot(bundledModelCapabilitiesSnapshotJson)
+	return cachedRuntimeSnapshot
 }
 
 export function getBundledModelCapabilitiesSnapshotForShared(): ReturnType<typeof getBundledModelCapabilitiesSnapshotForRuntime> {
