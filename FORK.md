@@ -76,7 +76,10 @@ Upstream moves very fast. The areas we touch are goal continuation, background t
 
 The older branch name is kept so old references still work. Do not add new work to it.
 
+## Added after the start
+
+- `97216d18f4` fix(tui-sidebar): stop idle busy-loop from roster poll. It is a port of `fix/tui-sidebar-roster-snapshot-memo` (`597221b644`), with one change: the config cache signature also includes the environment, because `OCX_PROFILE` is read from env. The old branch is kept on the fork for reference only.
+
 ## Not included
 
-- `fix/tui-sidebar-roster-snapshot-memo` (`597221b644`): a fix for an idle busy-loop in the roster poll. It is pushed to the fork but not merged and not running.
 - `qwen-router-rollout`: superseded. Its routing fix is already in the official line as `2d64774639`.
